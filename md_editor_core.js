@@ -3,7 +3,7 @@ var objApp = window.external;
 var wizEditor;
 var docTitle = "";
 
-$(function() {
+function createEditorMdApp(source_code) {
     var objDatabase = null;
     var objDocument = null;
     var objCommon = getObjCommon();
@@ -12,7 +12,7 @@ $(function() {
     var filesFullPath = getLocalFilesPath();
     var pluginFullPath = getPluginPath();
     var optionSettings = getOptionSettings();
-    var code = loadDocument();
+    var code = source_code; //loadDocument();
 
     //分清是不是快捷键保存，解决为知4.5版本自动保存问题
     var wizVerisonGreaterThan45 = null;
@@ -729,7 +729,7 @@ $(function() {
 
         return true;
     };
-});
+}
 
 ////////////////////////////////////////////////
 // 预防页面被跳转丢失编辑
