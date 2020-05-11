@@ -1,3 +1,242 @@
+
+function EditorMdApp(objApp) {
+    this.objApp = objApp;
+    this.objCommon = objApp.CommonUI;
+    this.objDocument = null;
+    this.docTempPath = null;
+
+    this.editor = null;
+    this.modified = false;
+}
+
+EditorMdApp.prototype.init = async function() {
+    this.objDocument = await objApp.Window.CurrentDocument();
+
+    // Set tab text to document title.
+    document.title = this.objDocument.Title;
+
+    // Extract document content
+    let tempPath = await this.objCommon.GetSpecialFolder("TemporaryFolder");
+    tempPath += "editor_md_temp/"; /** Temporary folder for Wiz.Editor.md */
+    await this.objCommon.CreateDirectory(tempPath);
+    tempPath += this.objDocument.GUID + "/"; /** Temporary folder for current document */
+    await this.objCommon.CreateDirectory(tempPath);
+    await this.objCommon.CreateDirectory(tempPath + "index_files/");
+    this.objDocument.SaveToFolder(tempPath);
+    this.docTempPath = tempPath;
+
+    // Get document
+    const mdSourceCode = await this.loadDocumentHtml(tempPath + "index.html");
+    createEditorMdApp(mdSourceCode);
+
+    //TODO: Remove C++ object 'objDocument'
+}
+
+/** Load document html content from local file. */
+EditorMdApp.prototype.loadDocumentHtml = async function(htmlFileName) {
+    let code = "";
+
+    // Load html body
+    let content = await this.objCommon.LoadTextFromFile(htmlFileName);
+    content = content.match(/<body[^>]*>[\s\S]*<\/body>/gi)[0];
+
+    const tempBody = document.body.innerHTML;
+    document.body.innerHTML = content;
+
+    const imgs = document.body.getElementsByTagName('img');
+    if (imgs.length) {
+        for (let i = imgs.length - 1; i >= 0; i--) {
+            const pi = imgs[i];
+            if (pi && pi.parentNode.getAttribute("name") != "markdownimage") {
+                const imgmd = document.createTextNode("![](" + pi.getAttribute("src") + ")");
+                $(pi).replaceWith(imgmd);
+            }
+        }
+    }
+
+    const links = document.body.getElementsByTagName('a');
+    if (links.length) {
+        for (let i = links.length - 1; i >= 0; i--) {
+            const pi = links[i];
+            if (pi && pi.getAttribute("href").indexOf("wiz://open_") != -1) {
+                const linkmd = document.createTextNode("[" + pi.textContent + "](" + pi.getAttribute("href") + ")");
+                $(pi).replaceWith(linkmd);
+            }
+        }
+    }
+
+    // Get pure markdown content from html
+    content = document.body.innerText;
+    document.body.innerHTML = tempBody;
+    code = content;
+
+    /*code = objDocument.GetText(0);*/
+    code = code.replace(/\u00a0/g, ' ');
+
+    // 如果用原生编辑器保存过图片，会被替换成错的图片路径
+    //var imgErrorPath = guid + "_128_files/";
+    //code = code.replace(new RegExp(imgErrorPath, "g"), filesDirName);
+
+    return code;
+}
+
+/** 配置编辑器功能 */
+EditorMdApp.prototype.configEditor = function() {
+    this.editor = editormd("test-editormd", {
+        theme           : optionSettings.EditToolbarTheme,        // 工具栏区域主题样式，见editormd.themes定义，夜间模式dark
+        editorTheme     : optionSettings.EditEditorTheme,         // 编辑器区域主题样式，见editormd.editorThemes定义，夜间模式pastel-on-dark
+        previewTheme    : optionSettings.EditPreviewTheme,        // 预览区区域主题样式，见editormd.previewThemes定义，夜间模式dark
+        value           : code,
+        path            : pluginFullPath + "Editor.md/lib/",
+        htmlDecode      : "style,script,iframe",  // 开启HTML标签解析，为了安全性，默认不开启
+        codeFold        : true,              // 代码折叠，默认关闭
+        tex             : true,              // 开启科学公式TeX语言支持，默认关闭
+        flowChart       : true,              // 开启流程图支持，默认关闭
+        sequenceDiagram : true,              // 开启时序/序列图支持，默认关闭
+        toc             : true,              // [TOC]自动生成目录，默认开启
+        tocm            : false,             // [TOCM]自动生成下拉菜单的目录，默认关闭
+        tocTitle        : "",                // 下拉菜单的目录的标题
+        tocDropdown     : false,             // [TOC]自动生成下拉菜单的目录，默认关闭
+        emoji           : optionSettings.EmojiSupport == "1" ? true : false,              // Emoji表情，默认关闭
+        taskList        : true,              // Task lists，默认关闭
+        disabledKeyMaps : [
+            "F9", "F10", "F11"               // 禁用切换全屏状态，因为为知已经支持
+        ],
+        keymapMode      : optionSettings.KeymapMode,              // 键盘映射模式
+        toolbarIcons : function() {
+            return getEditToolbarButton(optionSettings.EditToolbarButton);
+        },
+        toolbarIconsClass : {
+            saveIcon : "fa-floppy-o",  // 指定一个FontAawsome的图标类
+            captureIcon : "fa-scissors",
+            plainPasteIcon : "fa-clipboard",
+            optionsIcon : "fa-gear",
+            outlineIcon : "fa-list",
+            counterIcon : "fa-th-large",
+        },
+        toolbarHandlers : {
+            saveIcon : function() {
+                saveDocument();
+            },
+            captureIcon : function() {
+                captureScreenImage();
+            },
+            plainPasteIcon : function() {
+                plainPasteMode = !plainPasteMode;
+                showPlainPasteMode();
+            },
+            optionsIcon : function() {
+                this.executePlugin("optionsDialog", "options-dialog/options-dialog");
+            },
+            outlineIcon : function() {
+                this.executePlugin("outlineDialog", "outline-dialog/outline-dialog");
+            },
+            counterIcon : function() {
+                this.executePlugin("counterDialog", "counter-dialog/counter-dialog");
+            },
+        },
+        lang : {
+            description : "为知笔记Markdown编辑器，基于 Editor.md 构建。",
+            toolbar : {
+                saveIcon : "保存 (Ctrl+S)",
+                captureIcon : "截取屏幕",
+                plainPasteIcon : "纯文本粘贴模式",
+                optionsIcon : "选项",
+                outlineIcon : "内容目录",
+                counterIcon : "文章信息",
+            }
+        },
+        onload : function() {
+            var keyMap = {
+                "Ctrl-F9": function(cm) {
+                    $.proxy(wizEditor.toolbarHandlers["watch"], wizEditor)();
+                },
+                "Ctrl-F10": function(cm) {
+                    $.proxy(wizEditor.toolbarHandlers["preview"], wizEditor)();
+                },
+                "F1": function(cm) {
+                    wizEditor.cm.execCommand("defaultTab");
+                },
+                "Ctrl-Alt-F": function(cm) {
+                    wizEditor.cm.execCommand("find");
+                },
+                "Ctrl": function(cm) {
+                    // 可能按了保存快捷键，记录
+                    wantSaveKey = true;
+                    wantSaveTime = new Date();
+                }
+            };
+            this.addKeyMap(keyMap);
+            showPlainPasteMode();
+
+            // 监听文本变化事件
+            this.cm.on("change", function(_cm, changeObj) {
+                modified = true;
+            });
+
+            // 监听粘贴事件
+            this.cm.on("paste", function (_cm, e) {
+                var clipboardData = event.clipboardData || window.clipboardData;
+                if (clipboardData) {
+                    if (clipboardData.types == "Files") {
+                        clipboardToImage();
+                    }
+                    else if ($.inArray("text/html", clipboardData.types) != -1) {
+                        if (!plainPasteMode && clipboardHTMLToMd(clipboardData.getData("text/html"))) {
+                            e.preventDefault();
+                        }
+                    }
+                    else {
+                        //类型为"text/plain"，快捷键Ctrl+Shift+V
+                    }
+                }
+            });
+
+            // 绑定Ctrl-S快捷键和Vim的w命令保存
+            CodeMirror.commands.save = saveDocument;
+
+            var isWebPage = false;
+            if (isWebPage)
+            {
+                $.get('Editor.md/examples/test.md', function(md){
+                    wizEditor.setMarkdown(md);
+                    wizEditor.save();
+                });
+            }
+        },
+        onimageUploadButton : function() {
+            var filename = objCommon.SelectWindowsFile(true, "Image Files(*.png;*.jpg;*.gif;*.bmp)|*.png;*.jpg;*.gif;*.bmp|");
+            return getSavedLocalImage(filename);
+        },
+        onloadLocalFile : function(filename, fun) {
+            fun(objCommon.LoadTextFromFile(filename));
+        },
+        onloadLocalJsonFile : function(filename, fun) {
+            fun($.parseJSON(objCommon.LoadTextFromFile(filename)));
+        },
+        onsaveOptions : function(optionsValue) {
+            setOptionSettings(optionsValue);
+        },
+        ongetOptions : function() {
+            return optionSettings;
+        },
+        ongetObjDocument : function() {
+            return objDocument;
+        },
+        ongetObjCommon : function() {
+            return objCommon;
+        },
+        onclickHyperlink : function(hrefValue) {
+            return openOtherDocument(hrefValue) && openHrefInBrowser(hrefValue);
+        }
+    });
+}
+
+
+/////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////
+
 var modified = false;
 var objApp = window.external;
 var wizEditor;
