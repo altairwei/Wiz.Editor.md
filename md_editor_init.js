@@ -116,7 +116,7 @@ EditorMdApp.prototype.captureScreenImage = async function() {
 }
 
 /** 剪贴板图片 */
-EditorMdApp.prototype.clipboardToImage = function() {
+EditorMdApp.prototype.clipboardToImage = async function() {
     const filename = await this.objCommon.ClipboardToImage(this.objApp.Window.HWND, "");
     if (await this.objCommon.PathFileExists(filename)) {
         this.editor.insertValue("![](" + await this.docSaver.getSavedLocalImage(filename) + ")");
@@ -165,33 +165,57 @@ EditorMdApp.prototype.clipboardHTMLToMd = function(htmlText) {
     return false;
 };
 
+/** 解析参数 */
+EditorMdApp.prototype.getQueryString = function(name, hrefValue) {
+    if (hrefValue.indexOf("?") == -1 || hrefValue.indexOf(name + '=') == -1) {
+        return '';
+    }
+    var queryString = hrefValue.substring(hrefValue.indexOf("?") + 1);
+
+    var parameters = queryString.split("&");
+
+    var pos, paraName, paraValue;
+    for (var i = 0; i < parameters.length; i++) {
+        pos = parameters[i].indexOf('=');
+        if (pos == -1) { continue; }
+
+        paraName = parameters[i].substring(0, pos);
+        paraValue = parameters[i].substring(pos + 1);
+
+        if (paraName == name) {
+            return unescape(paraValue.replace(/\+/g, " "));
+        }
+    }
+    return '';
+};
+
 /** 打开新文档 */
-EditorMdApp.prototype.openOtherDocument = function(hrefValue) {
-    var guid = getQueryString("guid", hrefValue);
+EditorMdApp.prototype.openOtherDocument = async function(hrefValue) {
+    const guid = this.getQueryString("guid", hrefValue);
     if (guid == "") {
         return true;
     }
 
-    var kbGUID = getQueryString("kbguid", hrefValue);
-    var newDatabase = null
+    const kbGUID = this.getQueryString("kbguid", hrefValue);
+    let newDatabase = null
 
     if (kbGUID == "" || kbGUID == null) {
         newDatabase = objApp.Database;
     }
     else {
-        newDatabase = objApp.GetGroupDatabase(kbGUID);
+        newDatabase = await objApp.GetGroupDatabase(kbGUID);
     }
-    var isAttachment = hrefValue.indexOf("wiz://open_attachment") != -1;
+    const isAttachment = hrefValue.indexOf("wiz://open_attachment") != -1;
 
     try {
         if (isAttachment) {
-            var newAttachment = newDatabase.AttachmentFromGUID(guid);
-            objCommon.RunExe("explorer", newAttachment.FileName, false);
+            const newAttachment = await newDatabase.AttachmentFromGUID(guid);
+            await this.objApp.Window.ViewAttachment(newAttachment);
         }
         else
         {
-            var newDocument = newDatabase.DocumentFromGUID(guid);
-            objApp.Window.ViewDocument(newDocument, true);
+            var newDocument = await newDatabase.DocumentFromGUID(guid);
+            await objApp.Window.ViewDocument(newDocument, true);
         }
         return false;
     }
@@ -206,8 +230,7 @@ EditorMdApp.prototype.openHrefInBrowser = async function(hrefValue) {
     const opt = this.config.getOptionSettings();
     if (opt.HrefInBrowser == "1") {
         try {
-            //TODO: 直接使用Qt提供的API
-            await this.objCommon.RunExe("explorer", '\"' + hrefValue + '\"', false);
+            await this.objCommon.OpenUrl(hrefValue);
             return false;
         }
         catch (err) {
@@ -376,7 +399,7 @@ EditorMdApp.prototype.setupEditor = function(optionSettings, markdownSourceCode)
             return self.objCommon;
         },
         onclickHyperlink : function(hrefValue) {
-            return openOtherDocument(hrefValue) && openHrefInBrowser(hrefValue);
+            return self.openOtherDocument(hrefValue) && self.openHrefInBrowser(hrefValue);
         }
     });
 }
@@ -529,18 +552,18 @@ DocumentSaver.prototype.saveDocument = async function(objDoc, documentContent) {
 DocumentSaver.prototype.dealImgDoc = async function(doc) {
     let arrImgTags = "";
 
-    function dealImg(imgSrc) {
+    async function dealImg(imgSrc) {
         const result = await this.saveImageToLocal(imgSrc);
         arrImgTags += result[1];
         return result[0];
     }
 
     const imgReg = /(!\[[^\[]*?\]\()(.+?)(\s+['"][\s\S]*?['"])?(\))/g;
-    doc = doc.replace(imgReg, function(whole, a, b, c, d) {
+    doc = doc.replace(imgReg, async function(whole, a, b, c, d) {
         if (c) {
-            return a + dealImg(b) + c + d;
+            return a + await dealImg(b) + c + d;
         } else{
-            return a + dealImg(b) + d;
+            return a + await dealImg(b) + d;
         }
     });
 
@@ -655,6 +678,8 @@ async function createWebChannel(callback) {
                 const objPlugin = channel.objects["JSPluginSpec"];
                 const objModule = channel.objects["JSPluginModuleSpec"];
                 window["WizExplorerApp"] = objApp // Only used for APIs test.
+                window["JSPluginSpec"] = objPlugin;
+                window["JSPluginModuleSpec"] = objModule;
 
                 callback(objApp, objPlugin, objModule);
 
