@@ -9,7 +9,7 @@ function EditorMdApp(objApp, objPlugin, config, docSaver) {
     this.objApp = objApp;
     this.objCommon = objApp.CommonUI;
     //TODO: 实现这个 API
-    this.pluginPath = objPlugin.PluginPath;
+    this.pluginPath = objPlugin ? objPlugin.PluginPath : "./";
     this.objDocument = null;
     this.docTempPath = null;
 
@@ -22,12 +22,11 @@ function EditorMdApp(objApp, objPlugin, config, docSaver) {
     this.wantSaveTime = null;
 
     // Bind this to methods
-    this.saveDocument = this.saveDocument.bind(this);
     this.exit = this.exit.bind(this);
 }
 
 EditorMdApp.prototype.init = async function() {
-    this.objDocument = await objApp.Window.CurrentDocument();
+    this.objDocument = await this.objApp.Window.CurrentDocument();
 
     // Set tab text to document title.
     document.title = this.objDocument.Title;
@@ -276,22 +275,26 @@ EditorMdApp.prototype.setupEditor = function(optionSettings, markdownSourceCode)
             counterIcon : "fa-th-large",
         },
         toolbarHandlers : {
-            saveIcon : async function() {
-                // Save image
-                let doc = self.editor.getValue();
-                const arrResult = await self.docSaver.dealImgDoc(doc);
-                if (arrResult[0] != doc) {
-                    const cursor = self.editor.getCursor();
-                    self.editor.setMarkdown(arrResult[0]);
-                    self.editor.setCursor(cursor);
-                    doc = arrResult[0];
-                };
-                // Save document
-                await self.docSaver.saveDocument(self.objDocument, doc);
-                self.modified = false;
+            saveIcon : function() {
+                (async () => {
+                    // Save image
+                    let doc = self.editor.getValue();
+                    const arrResult = await self.docSaver.dealImgDoc(doc);
+                    if (arrResult[0] != doc) {
+                        const cursor = self.editor.getCursor();
+                        self.editor.setMarkdown(arrResult[0]);
+                        self.editor.setCursor(cursor);
+                        doc = arrResult[0];
+                    };
+                    // Save document
+                    await self.docSaver.saveDocument(self.objDocument, doc, arrResult[1]);
+                    self.modified = false;
+                })()
             },
-            captureIcon : async function() {
-                await self.captureScreenImage();
+            captureIcon : function() {
+                (async () => {
+                    await self.captureScreenImage();
+                })()
             },
             plainPasteIcon : function() {
                 plainPasteMode = !plainPasteMode;
@@ -462,11 +465,11 @@ EditorMdApp.prototype.handleSaveOptions = async function(optionsValue) {
 /////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////
 
-function EditorMdConfig(objApp) {
+function EditorMdConfig(objApp, objPlugin) {
     this.objApp = objApp;
     this.objCommon = objApp.CommonUI;
     //TODO: get plugin path from JSPluginSpec
-    this.pluginFullPath = null;
+    this.pluginPath = objPlugin ? objPlugin.PluginPath : "./";
     
     this.__optionSettings = null;
 }
@@ -478,7 +481,7 @@ EditorMdConfig.prototype.getConfigValue = async function(key, defaultValue) {
         value = localStorage.getItem(key);
     }
     else {
-        value = await this.objCommon.GetValueFromIni(pluginFullPath + "plugin.ini", "PluginConfig", key);
+        value = await this.objCommon.GetValueFromIni(this.pluginPath + "plugin.ini", "PluginConfig", key);
     }
     if (value == null || value == "") {
         value = defaultValue;
@@ -492,7 +495,7 @@ EditorMdConfig.prototype.setConfigValue = async function(key, value) {
         localStorage.setItem(key, value);
     }
     else {
-        this.objCommon.SetValueToIni(pluginFullPath + "plugin.ini", "PluginConfig", key, value);
+        this.objCommon.SetValueToIni(this.pluginPath + "plugin.ini", "PluginConfig", key, value);
     }
 };
 
@@ -534,15 +537,17 @@ function DocumentSaver(objApp, objPlugin) {
     this.objApp = objApp;
     this.objPlugin = objPlugin;
     this.objCommon = objApp.CommonUI;
+
+    this.saveDocument = this.saveDocument.bind(this);
 }
 
 /** 保存文档 */
-DocumentSaver.prototype.saveDocument = async function(objDoc, documentContent) {
+DocumentSaver.prototype.saveDocument = async function(objDoc, documentContent, imgStrDiv) {
     if (objDoc) {
         documentContent = $('<div/>').text(documentContent).html();
         documentContent = documentContent.replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;');   // 替换制表符
         documentContent = documentContent.replace(/\n|\r|(\r\n)|(\u0085)|(\u2028)|(\u2029)/g, "<br/>").replace(/ /g, '\u00a0');
-        documentContent += arrResult[1];
+        documentContent += imgStrDiv;
         documentContent = "<!DOCTYPE html><html><head><style id=\"wiz_custom_css\"></style></head><body>" + documentContent + "</body></html>";
         await objDoc.UpdateDocument3(documentContent, 0);
     }
