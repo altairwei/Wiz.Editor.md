@@ -5,7 +5,7 @@
  * @param {*} config EditorMdConfig object.
  * @param {*} docSaver DocumentSaver object.
  */
-function EditorMdApp(objApp, objPlugin, config, docSaver) {
+function EditorMdApp(objApp, objPlugin) {
     this.objApp = objApp;
     this.objCommon = objApp.CommonUI;
     //TODO: 实现这个 API
@@ -14,10 +14,10 @@ function EditorMdApp(objApp, objPlugin, config, docSaver) {
     this.docTempPath = null;
 
     this.editor = null;
-    this.docSaver = docSaver;
+    this.docSaver = new DocumentSaver(objApp, objPlugin);
     this.modified = false;
     this.plainPasteMode = false;  
-    this.config = config;
+    this.config = new EditorMdConfig(objApp, objPlugin);
     this.wantSaveKey = false;
     this.wantSaveTime = null;
 
@@ -38,6 +38,7 @@ EditorMdApp.prototype.init = async function() {
     const mdSourceCode = await this.loadDocumentHtml(tempPath + "index.html");
     const opt = this.config.getOptionSettings();
     this.setupEditor(opt, mdSourceCode);
+    this.docSaver.setDocument(this.objDocument, tempPath);
 }
 
 EditorMdApp.prototype.exit = function() {
@@ -48,7 +49,6 @@ EditorMdApp.prototype.exit = function() {
 
 EditorMdApp.prototype.extractDocumentToFolder = async function() {
     let tempPath = await this.objCommon.GetSpecialFolder("TemporaryFolder");
-    tempPath += "editor_md_temp/"; /** Temporary folder for Wiz.Editor.md */
     await this.objCommon.CreateDirectory(tempPath);
     tempPath += this.objDocument.GUID + "/"; /** Temporary folder for current document */
     await this.objCommon.CreateDirectory(tempPath);
@@ -102,7 +102,7 @@ EditorMdApp.prototype.loadDocumentHtml = async function(htmlFileName) {
 
     // 如果用原生编辑器保存过图片，会被替换成错的图片路径
     //var imgErrorPath = guid + "_128_files/";
-    //code = code.replace(new RegExp(imgErrorPath, "g"), filesDirName);
+    //code = code.replace(new RegExp(imgErrorPath, "g"), "index_files/");
 
     return code;
 }
@@ -114,6 +114,11 @@ EditorMdApp.prototype.clipboardToImage = async function() {
         this.editor.insertValue("![](" + await this.docSaver.getSavedLocalImage(filename) + ")");
     }
 };
+
+EditorMdApp.prototype.imageUploadAndInsert = async function() {
+    const filename = await this.objCommon.SelectWindowsFile(true, "Image Files(*.png *.jpg *.gif *.bmp)");
+    this.editor.insertValue("![](" + await this.docSaver.getSavedLocalImage(filename) + ")");
+}
 
 /** 显示纯文本粘贴模式 */
 EditorMdApp.prototype.showPlainPasteMode = function() {
@@ -232,6 +237,21 @@ EditorMdApp.prototype.openHrefInBrowser = async function(hrefValue) {
     return true;
 };
 
+EditorMdApp.prototype.save = async function() {
+    // Save image
+    let doc = this.editor.getValue();
+    const arrResult = await this.docSaver.dealImgDoc(doc);
+    if (arrResult[0] != doc) {
+        const cursor = this.editor.getCursor();
+        this.editor.setMarkdown(arrResult[0]);
+        this.editor.setCursor(cursor);
+        doc = arrResult[0];
+    };
+    // Save document
+    await this.docSaver.saveDocument(this.objDocument, doc, arrResult[1]);
+    this.modified = false;
+}
+
 /** 配置编辑器功能 */
 EditorMdApp.prototype.setupEditor = function(optionSettings, markdownSourceCode) {
     const self = this;
@@ -265,23 +285,14 @@ EditorMdApp.prototype.setupEditor = function(optionSettings, markdownSourceCode)
             optionsIcon : "fa-gear",
             outlineIcon : "fa-list",
             counterIcon : "fa-th-large",
+            imageIcon: "fa-picture-o"
         },
         toolbarHandlers : {
             saveIcon : function() {
-                (async () => {
-                    // Save image
-                    let doc = self.editor.getValue();
-                    const arrResult = await self.docSaver.dealImgDoc(doc);
-                    if (arrResult[0] != doc) {
-                        const cursor = self.editor.getCursor();
-                        self.editor.setMarkdown(arrResult[0]);
-                        self.editor.setCursor(cursor);
-                        doc = arrResult[0];
-                    };
-                    // Save document
-                    await self.docSaver.saveDocument(self.objDocument, doc, arrResult[1]);
-                    self.modified = false;
-                })()
+                self.save();
+            },
+            imageIcon : function() {
+                self.imageUploadAndInsert();
             },
             plainPasteIcon : function() {
                 plainPasteMode = !plainPasteMode;
@@ -301,6 +312,7 @@ EditorMdApp.prototype.setupEditor = function(optionSettings, markdownSourceCode)
             description : "为知笔记Markdown编辑器，基于 Editor.md 构建。",
             toolbar : {
                 saveIcon : "保存 (Ctrl+S)",
+                imageIcon: "添加图片",
                 plainPasteIcon : "纯文本粘贴模式",
                 optionsIcon : "选项",
                 outlineIcon : "内容目录",
@@ -309,11 +321,14 @@ EditorMdApp.prototype.setupEditor = function(optionSettings, markdownSourceCode)
         },
         onload : function() {
             var keyMap = {
+                "Ctrl-S": function(cm) {
+                    self.save();
+                },
                 "Ctrl-F9": function(cm) {
-                    $.proxy(wizEditor.toolbarHandlers["watch"], wizEditor)();
+                    $.proxy(self.editor.toolbarHandlers["watch"], wizEditor)();
                 },
                 "Ctrl-F10": function(cm) {
-                    $.proxy(wizEditor.toolbarHandlers["preview"], wizEditor)();
+                    $.proxy(self.editor.toolbarHandlers["preview"], wizEditor)();
                 },
                 "F1": function(cm) {
                     self.editor.cm.execCommand("defaultTab");
@@ -365,10 +380,6 @@ EditorMdApp.prototype.setupEditor = function(optionSettings, markdownSourceCode)
                 });
             }
         },
-        onimageUploadButton : async function() {
-            const filename = await self.objCommon.SelectWindowsFile(true, "Image Files(*.png;*.jpg;*.gif;*.bmp)|*.png;*.jpg;*.gif;*.bmp|");
-            return await self.docSaver.getSavedLocalImage(filename);
-        },
         onloadLocalFile : async function(filename, fun) {
             fun(await self.objCommon.LoadTextFromFile(filename));
         },
@@ -399,7 +410,7 @@ EditorMdApp.prototype.getEditToolbarButton = function(style) {
         return [
             "saveIcon", "|",
             "bold", "italic", "|",
-            "link", "quote", "code", "image", "|",
+            "link", "quote", "code", "imageIcon", "|",
             "list-ol", "list-ul", "h1", "hr", "|",
             "undo", "redo", "||",
             "outlineIcon", "counterIcon", "optionsIcon", "help", "info"
@@ -411,7 +422,7 @@ EditorMdApp.prototype.getEditToolbarButton = function(style) {
             "bold", "del", "italic", "quote", "ucwords", "uppercase", "lowercase", "|",
             "h1", "h2", "h3", "|",
             "list-ul", "list-ol", "hr", "|",
-            "plainPasteIcon", "link", "reference-link", "image", "code", "preformatted-text", "code-block", "table", "datetime", "emoji", "html-entities", "pagebreak", "|",
+            "plainPasteIcon", "link", "reference-link", "imageIcon", "code", "preformatted-text", "code-block", "table", "datetime", "emoji", "html-entities", "pagebreak", "|",
             "goto-line", "watch", "preview", "clear", "search", "||",
             "outlineIcon", "counterIcon", "optionsIcon", "help", "info"
         ];
@@ -523,8 +534,15 @@ function DocumentSaver(objApp, objPlugin) {
     this.objApp = objApp;
     this.objPlugin = objPlugin;
     this.objCommon = objApp.CommonUI;
+    this.objDocument = null;
+    this.tempPath = null;
 
     this.saveDocument = this.saveDocument.bind(this);
+}
+
+DocumentSaver.prototype.setDocument = function(objDocument, docTempPath) {
+    this.objDocument = objDocument;
+    this.tempPath = docTempPath;
 }
 
 /** 保存文档 */
@@ -541,22 +559,33 @@ DocumentSaver.prototype.saveDocument = async function(objDoc, documentContent, i
 
 /** 处理带图片内容 */
 DocumentSaver.prototype.dealImgDoc = async function(doc) {
+    const self = this;
     let arrImgTags = "";
 
     async function dealImg(imgSrc) {
-        const result = await this.saveImageToLocal(imgSrc);
+        const result = await self.saveImageToLocal(imgSrc);
         arrImgTags += result[1];
         return result[0];
     }
 
+    // Replace all imges
     const imgReg = /(!\[[^\[]*?\]\()(.+?)(\s+['"][\s\S]*?['"])?(\))/g;
-    doc = doc.replace(imgReg, async function(whole, a, b, c, d) {
-        if (c) {
-            return a + await dealImg(b) + c + d;
-        } else{
-            return a + await dealImg(b) + d;
-        }
-    });
+    const allImgMatched = doc.matchAll(imgReg);
+    for (const match of allImgMatched) {
+        const whole = match[0];
+        const a = match[1];
+        const b = match[2];
+        const c = match[3];
+        const d = match[4];
+
+        let img = whole;
+        if (c)
+            img = a + await dealImg(b) + c + d;
+        else
+            img = a + await dealImg(b) + d;
+
+        doc = doc.replace(whole, img);
+    }
 
     let imgStrDiv = "";
     if (arrImgTags != "") {
@@ -567,13 +596,17 @@ DocumentSaver.prototype.dealImgDoc = async function(doc) {
 
 /** 保存图片到本地临时目录, 返回新图片路径名和图片HTML标签内容 */
 DocumentSaver.prototype.saveImageToLocal = async function(filename) {
+    if (!this.tempPath)
+        throw new Error("Please setup document before save image.");
+
+    const filesFullPath = this.tempPath + "index_files/";
     filename = filename.replace(/\\/g, '/');
     const imgName = filename.substring(filename.lastIndexOf('/') + 1);
     let filenameNew = filename;
     let tagImg = "";
 
     let imgFullPath = "";
-    if (filename.indexOf(filesDirName) == 0) {
+    if (filename.indexOf("index_files/") == 0) {
         imgFullPath = filesFullPath + imgName;
     }
     else {
@@ -619,7 +652,7 @@ DocumentSaver.prototype.saveImageToLocal = async function(filename) {
                 await this.objCommon.CopyFile(imgFullPath, imgCopyToFullPath);
             }
 
-            filenameNew = filesDirName + imgNameNew;
+            filenameNew = "index_files/" + imgNameNew;
             tagImg = "<img src=\"" + imgCopyToFullPath + "\">";
         }
     }
@@ -681,12 +714,18 @@ async function createWebChannel(callback) {
 
 }
 
+////////////////////////////////////////////////
+// 得到本地文件路径
+function getLocalFilesPath() {
+    const htmlName = document.location.href;
+    const htmlDirName = new URL(htmlName.substring(0, htmlName.lastIndexOf('/') + 1));
+    const htmlPath = htmlDirName.pathname;
+    return decodeURI(htmlPath + "index_files/");
+}
+
 $(function() {
     createWebChannel(async function(objApp, objPlugin, objModule) {
-        const cfg = new EditorMdConfig(objApp);
-        const docSaver = new DocumentSaver(objApp, objPlugin);
-        const app = new EditorMdApp(objApp, objPlugin, cfg, docSaver);
-
+        const app = new EditorMdApp(objApp, objPlugin);
         await app.init();
     })
 })
