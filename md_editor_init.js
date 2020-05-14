@@ -107,13 +107,6 @@ EditorMdApp.prototype.loadDocumentHtml = async function(htmlFileName) {
     return code;
 }
 
-EditorMdApp.prototype.captureScreenImage = async function() {
-    const filename = await this.objCommon.CaptureScreen(0);
-    if (await this.objCommon.PathFileExists(filename)) {
-        this.editor.insertValue("![](" + await this.docSaver.getSavedLocalImage(filename) + ")");
-    };
-}
-
 /** 剪贴板图片 */
 EditorMdApp.prototype.clipboardToImage = async function() {
     const filename = await this.objCommon.ClipboardToImage(this.objApp.Window.HWND, "");
@@ -268,7 +261,6 @@ EditorMdApp.prototype.setupEditor = function(optionSettings, markdownSourceCode)
         },
         toolbarIconsClass : {
             saveIcon : "fa-floppy-o",  // 指定一个FontAawsome的图标类
-            captureIcon : "fa-scissors",
             plainPasteIcon : "fa-clipboard",
             optionsIcon : "fa-gear",
             outlineIcon : "fa-list",
@@ -291,11 +283,6 @@ EditorMdApp.prototype.setupEditor = function(optionSettings, markdownSourceCode)
                     self.modified = false;
                 })()
             },
-            captureIcon : function() {
-                (async () => {
-                    await self.captureScreenImage();
-                })()
-            },
             plainPasteIcon : function() {
                 plainPasteMode = !plainPasteMode;
                 self.showPlainPasteMode();
@@ -314,7 +301,6 @@ EditorMdApp.prototype.setupEditor = function(optionSettings, markdownSourceCode)
             description : "为知笔记Markdown编辑器，基于 Editor.md 构建。",
             toolbar : {
                 saveIcon : "保存 (Ctrl+S)",
-                captureIcon : "截取屏幕",
                 plainPasteIcon : "纯文本粘贴模式",
                 optionsIcon : "选项",
                 outlineIcon : "内容目录",
@@ -425,7 +411,7 @@ EditorMdApp.prototype.getEditToolbarButton = function(style) {
             "bold", "del", "italic", "quote", "ucwords", "uppercase", "lowercase", "|",
             "h1", "h2", "h3", "|",
             "list-ul", "list-ol", "hr", "|",
-            "plainPasteIcon", "link", "reference-link", "image", "captureIcon", "code", "preformatted-text", "code-block", "table", "datetime", "emoji", "html-entities", "pagebreak", "|",
+            "plainPasteIcon", "link", "reference-link", "image", "code", "preformatted-text", "code-block", "table", "datetime", "emoji", "html-entities", "pagebreak", "|",
             "goto-line", "watch", "preview", "clear", "search", "||",
             "outlineIcon", "counterIcon", "optionsIcon", "help", "info"
         ];
