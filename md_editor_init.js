@@ -26,18 +26,37 @@ function EditorMdApp(objApp, objPlugin) {
 }
 
 EditorMdApp.prototype.init = async function() {
-    this.objDocument = await this.objApp.Window.CurrentDocument();
+    const guid = this.getQueryString("guid", location.href);
+    const kbGUID = this.getQueryString("kbguid", location.href);
+
+    const dbMgr = this.objApp.DatabaseManager;
+    const db = await dbMgr.GetGroupDatabase(kbGUID);
+
+    this.objDocument = await db.DocumentFromGUID(guid);
 
     // Set tab text to document title.
     document.title = this.objDocument.Title;
 
-    // Extract document content
-    const tempPath = await this.extractDocumentToFolder();
-
     // Get document
-    const mdSourceCode = await this.loadDocumentHtml(tempPath + "index.html");
+    const mdSourceCode = this.loadDocumentHtml();
+
+    document.body.outerHTML = `
+    <body style="height:100%; overflow: hidden;">
+        <div id="layout" style="height:100%;">
+            <div id="test-editormd">
+                <textarea style="display:none;"></textarea>
+            </div>
+        </div>
+    </body>
+    `;
+
     const opt = this.config.getOptionSettings();
     this.setupEditor(opt, mdSourceCode);
+
+    let tempPath = await this.objCommon.GetSpecialFolder("TemporaryFolder");
+    tempPath += this.objDocument.GUID + "/"; /** Temporary folder for current document */
+    await this.objCommon.CreateDirectory(tempPath + "index_files/");
+    this.docTempPath = tempPath;
     this.docSaver.setDocument(this.objDocument, tempPath);
 }
 
@@ -60,15 +79,8 @@ EditorMdApp.prototype.extractDocumentToFolder = async function() {
 }
 
 /** Load document html content from local file. */
-EditorMdApp.prototype.loadDocumentHtml = async function(htmlFileName) {
+EditorMdApp.prototype.loadDocumentHtml = function() {
     let code = "";
-
-    // Load html body
-    let content = await this.objCommon.LoadTextFromFile(htmlFileName);
-    content = content.match(/<body[^>]*>[\s\S]*<\/body>/gi)[0];
-
-    const tempBody = document.body.innerHTML;
-    document.body.innerHTML = content;
 
     const imgs = document.body.getElementsByTagName('img');
     if (imgs.length) {
@@ -93,9 +105,7 @@ EditorMdApp.prototype.loadDocumentHtml = async function(htmlFileName) {
     }
 
     // Get pure markdown content from html
-    content = document.body.innerText;
-    document.body.innerHTML = tempBody;
-    code = content;
+    code = (' ' + document.body.innerText).slice(1);
 
     /*code = objDocument.GetText(0);*/
     code = code.replace(/\u00a0/g, ' ');
@@ -109,7 +119,7 @@ EditorMdApp.prototype.loadDocumentHtml = async function(htmlFileName) {
 
 /** 剪贴板图片 */
 EditorMdApp.prototype.clipboardToImage = async function() {
-    const filename = await this.objCommon.ClipboardToImage(this.objApp.Window.HWND, "");
+    const filename = await this.objCommon.ClipboardToImage("");
     if (await this.objCommon.PathFileExists(filename)) {
         this.editor.insertValue("![](" + await this.docSaver.getSavedLocalImage(filename) + ")");
     }
@@ -261,6 +271,7 @@ EditorMdApp.prototype.setupEditor = function(optionSettings, markdownSourceCode)
         previewTheme    : optionSettings.EditPreviewTheme,        // 预览区区域主题样式，见editormd.previewThemes定义，夜间模式dark
         value           : markdownSourceCode,
         path            : self.pluginPath + "Editor.md/lib/",
+        pluginPath      : self.pluginPath + "Editor.md/plugins/",
         htmlDecode      : "style,script,iframe",  // 开启HTML标签解析，为了安全性，默认不开启
         codeFold        : true,              // 代码折叠，默认关闭
         tex             : true,              // 开启科学公式TeX语言支持，默认关闭
@@ -354,7 +365,7 @@ EditorMdApp.prototype.setupEditor = function(optionSettings, markdownSourceCode)
             this.cm.on("paste", function (_cm, e) {
                 const clipboardData = event.clipboardData || window.clipboardData;
                 if (clipboardData) {
-                    if (clipboardData.types == "Files") {
+                    if ($.inArray("Files", clipboardData.types) != -1) {
                         self.clipboardToImage();
                     }
                     else if ($.inArray("text/html", clipboardData.types) != -1) {
@@ -553,7 +564,7 @@ DocumentSaver.prototype.saveDocument = async function(objDoc, documentContent, i
         documentContent = documentContent.replace(/\n|\r|(\r\n)|(\u0085)|(\u2028)|(\u2029)/g, "<br/>").replace(/ /g, '\u00a0');
         documentContent += imgStrDiv;
         documentContent = "<!DOCTYPE html><html><head><style id=\"wiz_custom_css\"></style></head><body>" + documentContent + "</body></html>";
-        await objDoc.UpdateDocument3(documentContent, 0);
+        await objDoc.UpdateDocument4(documentContent, this.tempPath + "index.html", 0);
     }
 }
 
@@ -675,43 +686,18 @@ DocumentSaver.prototype.getSavedLocalImage = async function(filename) {
  */
 async function createWebChannel(callback) {
     const Log = console;
-    return new Promise((resolve, reject) => {
-        const baseUrl = "ws://localhost:8848";
-        Log.info("Connecting to WebSocket server of WizNotePlus at " + baseUrl + ".");
+    new QWebChannel(qt.webChannelTransport, async function (channel) {
+        Log.debug("Web channel opened");
 
-        let socket = new WebSocket(baseUrl);
+        const objApp = channel.objects["WizExplorerApp"];
+        const objPlugin = channel.objects["JSPlugin"];
+        const objModule = channel.objects["JSPluginModule"];
+        window["WizExplorerApp"] = objApp // Only used for APIs test.
+        window["JSPlugin"] = objPlugin;
+        window["JSPluginModule"] = objModule;
 
-        socket.onclose = function () {
-            Log.error("web channel closed");
-            state.isConnected = false;
-        };
-
-        socket.onerror = function (error) {
-            Log.error("web channel error: " + error);
-            state.isConnected = false;
-            error.message = "Web channel error, failed to connect to WizNotPlus."
-            reject(error);
-        };
-
-        socket.onopen = function () {
-            Log.debug("WebSocket connected, setting up QWebChannel.");
-            new QWebChannel(socket, async function (channel) {
-                Log.debug("Web channel opened");
-
-                const objApp = channel.objects["WizExplorerApp"];
-                const objPlugin = channel.objects["JSPluginSpec"];
-                const objModule = channel.objects["JSPluginModuleSpec"];
-                window["WizExplorerApp"] = objApp // Only used for APIs test.
-                window["JSPluginSpec"] = objPlugin;
-                window["JSPluginModuleSpec"] = objModule;
-
-                callback(objApp, objPlugin, objModule);
-
-                resolve(true);
-            });
-        }
-    })
-
+        callback(objApp, objPlugin, objModule);
+    });
 }
 
 ////////////////////////////////////////////////
@@ -724,6 +710,7 @@ function getLocalFilesPath() {
 }
 
 $(function() {
+    //document.body.style.display = "None";
     createWebChannel(async function(objApp, objPlugin, objModule) {
         const app = new EditorMdApp(objApp, objPlugin);
         await app.init();
