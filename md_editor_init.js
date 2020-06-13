@@ -248,6 +248,8 @@ EditorMdApp.prototype.openHrefInBrowser = async function(hrefValue) {
 };
 
 EditorMdApp.prototype.save = async function() {
+    if (!this.modified)
+        return;
     // Save image
     let doc = this.editor.getValue();
     const arrResult = await this.docSaver.dealImgDoc(doc);
@@ -333,9 +335,7 @@ EditorMdApp.prototype.setupEditor = function(optionSettings, markdownSourceCode)
         onload : function() {
             var keyMap = {
                 "Ctrl-S": function(cm) {
-                    if (self.modified) {
-                        self.save();
-                    }
+                    self.save();
                 },
                 "Ctrl-F9": function(cm) {
                     $.proxy(self.editor.toolbarHandlers["watch"], self.editor)();
@@ -378,7 +378,6 @@ EditorMdApp.prototype.setupEditor = function(optionSettings, markdownSourceCode)
                     }
                     else {
                         //类型为"text/plain"，快捷键Ctrl+Shift+V
-                        alert("Hello");
                     }
                 }
             });
@@ -589,6 +588,7 @@ DocumentSaver.prototype.dealImgDoc = async function(doc) {
 
     // Replace all imges
     const imgReg = /(!\[[^\[]*?\]\()(.+?)(\s+['"][\s\S]*?['"])?(\))/g;
+    // Chrome 73 supports String.prototype.matchAll
     const allImgMatched = doc.matchAll(imgReg);
     for (const match of allImgMatched) {
         const whole = match[0];
