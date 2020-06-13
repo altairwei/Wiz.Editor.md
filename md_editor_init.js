@@ -50,7 +50,7 @@ EditorMdApp.prototype.init = async function() {
     </body>
     `;
 
-    const opt = this.config.getOptionSettings();
+    const opt = await this.config.getOptionSettings();
     this.setupEditor(opt, mdSourceCode);
 
     let tempPath = await this.objCommon.GetSpecialFolder("TemporaryFolder");
@@ -234,7 +234,7 @@ EditorMdApp.prototype.openOtherDocument = async function(hrefValue) {
 
 /** 用默认浏览器打开链接 */
 EditorMdApp.prototype.openHrefInBrowser = async function(hrefValue) {
-    const opt = this.config.getOptionSettings();
+    const opt = await this.config.getOptionSettings();
     if (opt.HrefInBrowser == "1") {
         try {
             await this.objCommon.OpenUrl(hrefValue);
@@ -306,7 +306,7 @@ EditorMdApp.prototype.setupEditor = function(optionSettings, markdownSourceCode)
                 self.imageUploadAndInsert();
             },
             plainPasteIcon : function() {
-                plainPasteMode = !plainPasteMode;
+                self.plainPasteMode = !self.plainPasteMode;
                 self.showPlainPasteMode();
             },
             optionsIcon : function() {
@@ -333,19 +333,22 @@ EditorMdApp.prototype.setupEditor = function(optionSettings, markdownSourceCode)
         onload : function() {
             var keyMap = {
                 "Ctrl-S": function(cm) {
-                    self.save();
+                    if (self.modified) {
+                        self.save();
+                    }
                 },
                 "Ctrl-F9": function(cm) {
-                    $.proxy(self.editor.toolbarHandlers["watch"], wizEditor)();
+                    $.proxy(self.editor.toolbarHandlers["watch"], self.editor)();
                 },
                 "Ctrl-F10": function(cm) {
-                    $.proxy(self.editor.toolbarHandlers["preview"], wizEditor)();
+                    $.proxy(self.editor.toolbarHandlers["preview"], self.editor)();
                 },
                 "F1": function(cm) {
                     self.editor.cm.execCommand("defaultTab");
                 },
-                "Ctrl-Alt-F": function(cm) {
-                    self.editor.cm.execCommand("find");
+                "Ctrl-F": function(cm) {
+                    // FIXME: not available
+                    cm.execCommand("find");
                 },
                 "Ctrl": function(cm) {
                     // 可能按了保存快捷键，记录
@@ -375,6 +378,7 @@ EditorMdApp.prototype.setupEditor = function(optionSettings, markdownSourceCode)
                     }
                     else {
                         //类型为"text/plain"，快捷键Ctrl+Shift+V
+                        alert("Hello");
                     }
                 }
             });
@@ -391,17 +395,21 @@ EditorMdApp.prototype.setupEditor = function(optionSettings, markdownSourceCode)
                 });
             }
         },
-        onloadLocalFile : async function(filename, fun) {
-            fun(await self.objCommon.LoadTextFromFile(filename));
+        onloadLocalFile : function(filename, fun) {
+            (async () => {
+                fun(await self.objCommon.LoadTextFromFile(filename));
+            })()
         },
-        onloadLocalJsonFile : async function(filename, fun) {
-            fun($.parseJSON(await self.objCommon.LoadTextFromFile(filename)));
+        onloadLocalJsonFile : function(filename, fun) {
+            (async () => {
+                fun($.parseJSON(await self.objCommon.LoadTextFromFile(filename)));
+            })()
         },
         onsaveOptions : function(optionsValue) {
             self.handleSaveOptions(optionsValue);
         },
-        ongetOptions : async function() {
-            return await self.getOptionSettings();
+        ongetOptions : function(callback) {
+            self.config.getOptionSettings().then(callback);
         },
         ongetObjDocument : function() {
             return self.objDocument;
@@ -458,7 +466,7 @@ EditorMdApp.prototype.handleSaveOptions = async function(optionsValue) {
         this.editor.setPreviewTheme(optionsValue.EditPreviewTheme);
     }
     if (oldOptionSettings.EmojiSupport != optionsValue.EmojiSupport) {
-        const doc = wizEditor.getValue();
+        const doc = this.editor.getValue();
         this.editor.config("emoji", optionsValue.EmojiSupport == "1" ? true : false);
         this.editor.setValue(doc);
     }

@@ -179,59 +179,61 @@
                 }
             }
 
-            var optionsNowValue = $.proxy(settings.ongetOptions, this)();
-            // var markdownStyle = optionsNowValue["MarkdownStyle"];
-            // var markdownStyleChecked = 1;
-            // if (markdownStyle == "Editor_md") {
-            //     markdownStyleChecked = 0;
-            // }
-            // faBtns.find("[name=\"markdown-style\"]:checked").removeAttr("checked");
-            // faBtns.find("input#editormd-table-dialog-radio" + markdownStyleChecked).attr("checked", "checked").click();
+            $.proxy(settings.ongetOptions, this)((optionsNowValue) => {
+                // var markdownStyle = optionsNowValue["MarkdownStyle"];
+                // var markdownStyleChecked = 1;
+                // if (markdownStyle == "Editor_md") {
+                //     markdownStyleChecked = 0;
+                // }
+                // faBtns.find("[name=\"markdown-style\"]:checked").removeAttr("checked");
+                // faBtns.find("input#editormd-table-dialog-radio" + markdownStyleChecked).attr("checked", "checked").click();
 
-            var emojiSupport = optionsNowValue["EmojiSupport"];
-            var emojiSupportChecked = 0;
-            if (emojiSupport == "0") {
-                emojiSupportChecked = 1;
-            }
-            faEmojiBtns.find("[name=\"emojiSupport\"]:checked").removeAttr("checked");
-            faEmojiBtns.find("input#editormd-emoji-radio" + emojiSupportChecked).attr("checked", "checked").click();
+                var emojiSupport = optionsNowValue["EmojiSupport"];
+                var emojiSupportChecked = 0;
+                if (emojiSupport == "0") {
+                    emojiSupportChecked = 1;
+                }
+                faEmojiBtns.find("[name=\"emojiSupport\"]:checked").removeAttr("checked");
+                faEmojiBtns.find("input#editormd-emoji-radio" + emojiSupportChecked).attr("checked", "checked").click();
 
-            var hrefInBrowser = optionsNowValue["HrefInBrowser"];
-            var hrefInBrowserChecked = 0;
-            if (hrefInBrowser == "1") {
-                hrefInBrowserChecked = 1;
-            }
-            faHrefBtns.find("[name=\"hrefInBrowser\"]:checked").removeAttr("checked");
-            faHrefBtns.find("input#editormd-href-radio" + hrefInBrowserChecked).attr("checked", "checked").click();
+                var hrefInBrowser = optionsNowValue["HrefInBrowser"];
+                var hrefInBrowserChecked = 0;
+                if (hrefInBrowser == "1") {
+                    hrefInBrowserChecked = 1;
+                }
+                faHrefBtns.find("[name=\"hrefInBrowser\"]:checked").removeAttr("checked");
+                faHrefBtns.find("input#editormd-href-radio" + hrefInBrowserChecked).attr("checked", "checked").click();
 
-            function themeSelect(id, themes, curValue)
-            {
-                var select = dialog.find(id);
-
-                if (select.html() === "")
+                function themeSelect(id, themes, curValue)
                 {
-                    for (var i = 0, len = themes.length; i < len; i ++)
+                    var select = dialog.find(id);
+
+                    if (select.html() === "")
                     {
-                        var theme    = themes[i];
-                        var selected = (i == 0) ? " selected=\"selected\"" : "";
+                        for (var i = 0, len = themes.length; i < len; i ++)
+                        {
+                            var theme    = themes[i];
+                            var selected = (i == 0) ? " selected=\"selected\"" : "";
 
-                        select.append("<option value=\"" + theme + "\"" + selected + ">" + theme + "</option>");
+                            select.append("<option value=\"" + theme + "\"" + selected + ">" + theme + "</option>");
+                        }
                     }
+
+                    if (curValue != null)
+                    {
+                        select.val(curValue);
+                    }
+                    return select;
                 }
 
-                if (curValue != null)
-                {
-                    select.val(curValue);
-                }
-                return select;
-            }
+                //themeSelect("#read-preview-area-theme-select", editormd.previewThemes, optionsNowValue["ReadTheme"]);
+                themeSelect("#edit-toolbar-area-button-select", dialogLang.toolbarButtonStyle, optionsNowValue["EditToolbarButton"]);
+                themeSelect("#edit-toolbar-area-theme-select", editormd.themes, optionsNowValue["EditToolbarTheme"]);
+                themeSelect("#edit-editor-area-theme-select", editormd.editorThemes, optionsNowValue["EditEditorTheme"]);
+                themeSelect("#edit-preview-area-theme-select", editormd.previewThemes, optionsNowValue["EditPreviewTheme"]);
+                themeSelect("#edit-toolbar-area-keymapmodes-select", editormd.keymapModes, optionsNowValue["KeymapMode"]);
+            });
 
-            //themeSelect("#read-preview-area-theme-select", editormd.previewThemes, optionsNowValue["ReadTheme"]);
-            themeSelect("#edit-toolbar-area-button-select", dialogLang.toolbarButtonStyle, optionsNowValue["EditToolbarButton"]);
-            themeSelect("#edit-toolbar-area-theme-select", editormd.themes, optionsNowValue["EditToolbarTheme"]);
-            themeSelect("#edit-editor-area-theme-select", editormd.editorThemes, optionsNowValue["EditEditorTheme"]);
-            themeSelect("#edit-preview-area-theme-select", editormd.previewThemes, optionsNowValue["EditPreviewTheme"]);
-            themeSelect("#edit-toolbar-area-keymapmodes-select", editormd.keymapModes, optionsNowValue["KeymapMode"]);
         };
 
     };

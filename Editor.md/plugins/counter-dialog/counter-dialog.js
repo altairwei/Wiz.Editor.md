@@ -99,10 +99,12 @@
 	        var objCommon = $.proxy(settings.ongetObjCommon, this)();
 	        if (objDocument != null && objCommon != null)
 	        {
-	        	var dtCreated = new Date(objDocument.DateCreated);
-	        	timeCreated = objCommon.ToLocalDateString(dtCreated, false) + " " + objCommon.ToLocalTimeString(dtCreated);
-	        	var dtModified = new Date(objDocument.DateModified);
-	        	timeModified = objCommon.ToLocalDateString(dtModified, false) + " " + objCommon.ToLocalTimeString(dtModified);
+                var dtCreated = new Date(objDocument.DateCreated);
+                timeCreated = dtCreated.toLocaleDateString() + " " + dtCreated.toLocaleTimeString([], { hour12: false });
+	        	//timeCreated = await objCommon.ToLocalDateString(dtCreated, false) + " " + await objCommon.ToLocalTimeString(dtCreated);
+                var dtModified = new Date(objDocument.DateModified);
+                timeModified = dtModified.toLocaleDateString() + " " + dtModified.toLocaleTimeString([], { hour12: false });
+	        	//timeModified = await objCommon.ToLocalDateString(dtModified, false) + " " + await objCommon.ToLocalTimeString(dtModified);
 	        }
 
 	        var dialogContent2 = [
