@@ -271,6 +271,7 @@ EditorMdApp.prototype.setupEditor = function(optionSettings, markdownSourceCode)
         theme           : optionSettings.EditToolbarTheme,        // 工具栏区域主题样式，见editormd.themes定义，夜间模式dark
         editorTheme     : optionSettings.EditEditorTheme,         // 编辑器区域主题样式，见editormd.editorThemes定义，夜间模式pastel-on-dark
         previewTheme    : optionSettings.EditPreviewTheme,        // 预览区区域主题样式，见editormd.previewThemes定义，夜间模式dark
+        watch           : false,
         value           : markdownSourceCode,
         path            : self.pluginPath + "Editor.md/lib/",
         pluginPath      : self.pluginPath + "Editor.md/plugins/",
