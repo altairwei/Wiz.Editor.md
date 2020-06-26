@@ -23,6 +23,7 @@ function EditorMdApp(objApp, objPlugin) {
 
     // Bind this to methods
     this.exit = this.exit.bind(this);
+    this.saveBeforeUnload = this.saveBeforeUnload.bind(this);
 }
 
 EditorMdApp.prototype.init = async function() {
@@ -262,6 +263,12 @@ EditorMdApp.prototype.save = async function() {
     // Save document
     await this.docSaver.saveDocument(this.objDocument, doc, arrResult[1]);
     this.modified = false;
+}
+
+EditorMdApp.prototype.saveBeforeUnload = function(e) {
+    if (this.modified) {
+        e.returnValue = "Your changes will be lost.";
+    }
 }
 
 /** 配置编辑器功能 */
@@ -722,6 +729,7 @@ $(function() {
     //document.body.style.display = "None";
     createWebChannel(async function(objApp, objPlugin, objModule) {
         const app = new EditorMdApp(objApp, objPlugin);
+        window.addEventListener("beforeunload", app.saveBeforeUnload);
         await app.init();
     })
 })
